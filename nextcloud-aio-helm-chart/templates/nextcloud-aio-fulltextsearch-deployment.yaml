@@ -3,12 +3,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    kompose.cmd: kompose convert -c -f latest.yml --namespace {{ values.NAMESPACE }}
-    kompose.version: 1.30.0 (9d8dcb518)
+    kompose.cmd: kompose convert -c -f latest.yml --namespace {{ .Values.NAMESPACE }}
+    kompose.version: 1.31.2 (a92241f79)
   labels:
     io.kompose.service: nextcloud-aio-fulltextsearch
   name: nextcloud-aio-fulltextsearch
-  namespace: {{ values.NAMESPACE }}
+  namespace: {{ .Values.NAMESPACE }}
 spec:
   replicas: 1
   selector:
@@ -17,8 +17,8 @@ spec:
   template:
     metadata:
       annotations:
-        kompose.cmd: kompose convert -c -f latest.yml --namespace {{ values.NAMESPACE }}
-        kompose.version: 1.30.0 (9d8dcb518)
+        kompose.cmd: kompose convert -c -f latest.yml --namespace {{ .Values.NAMESPACE }}
+        kompose.version: 1.31.2 (a92241f79)
       labels:
         io.kompose.network/nextcloud-aio: "true"
         io.kompose.service: nextcloud-aio-fulltextsearch
@@ -37,6 +37,8 @@ spec:
         - env:
             - name: ES_JAVA_OPTS
               value: -Xms512M -Xmx512M
+            - name: FULLTEXTSEARCH_PASSWORD
+              value: "{{ .Values.FULLTEXTSEARCH_PASSWORD }}"
             - name: TZ
               value: "{{ .Values.TIMEZONE }}"
             - name: bootstrap.memory_lock
@@ -53,11 +55,10 @@ spec:
               value: basic
             - name: xpack.security.enabled
               value: "false"
-          image: nextcloud/aio-fulltextsearch:20230728_085937-latest
+          image: nextcloud/aio-fulltextsearch:20231016_081107-latest
           name: nextcloud-aio-fulltextsearch
           ports:
             - containerPort: 9200
-              hostPort: 9200
               protocol: TCP
           volumeMounts:
             - mountPath: /usr/share/elasticsearch/data

@@ -149,6 +149,21 @@ class ConfigurationManager
         }
     }
 
+    public function isDockerSocketProxyEnabled() : bool {
+        $config = $this->GetConfig();
+        if (isset($config['isDockerSocketProxyEnabled']) && $config['isDockerSocketProxyEnabled'] === 1) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    public function SetDockerSocketProxyEnabledState(int $value) : void {
+        $config = $this->GetConfig();
+        $config['isDockerSocketProxyEnabled'] = $value;
+        $this->WriteConfig($config);
+    }
+
     public function SetClamavEnabledState(int $value) : void {
         $config = $this->GetConfig();
         $config['isClamavEnabled'] = $value;
@@ -661,7 +676,7 @@ class ConfigurationManager
     /**
      * @throws InvalidSettingConfigurationException
      */
-    public function SetDailyBackupTime(string $time, bool $enableAutomaticUpdates) : void {
+    public function SetDailyBackupTime(string $time, bool $enableAutomaticUpdates, bool $successNotification) : void {
         if ($time === "") {
             throw new InvalidSettingConfigurationException("The daily backup time must not be empty!");
         }
@@ -672,6 +687,13 @@ class ConfigurationManager
         
         if ($enableAutomaticUpdates === false) {
             $time .= PHP_EOL . 'automaticUpdatesAreNotEnabled';
+        } else {
+            $time .= PHP_EOL;
+        }
+        if ($successNotification === false) {
+            $time .= PHP_EOL . 'successNotificationsAreNotEnabled';
+        } else {
+            $time .= PHP_EOL;
         }
         file_put_contents(DataConst::GetDailyBackupTimeFile(), $time);
     }
@@ -714,7 +736,7 @@ class ConfigurationManager
             // Trim all unwanted chars on both sites
             $entry = trim($entry);
             if ($entry !== "") {
-                if (!preg_match("#^/[.0-1a-zA-Z/-_]+$#", $entry) && !preg_match("#^[.0-1a-zA-Z_-]+$#", $entry)) {
+                if (!preg_match("#^/[.0-1a-zA-Z/_-]+$#", $entry) && !preg_match("#^[.0-1a-zA-Z_-]+$#", $entry)) {
                     throw new InvalidSettingConfigurationException("You entered unallowed characters! Problematic is " . $entry);
                 }
                 $validDirectories .= rtrim($entry, '/') . PHP_EOL;
@@ -859,6 +881,17 @@ class ConfigurationManager
         }
     }
 
+    private function GetCommunityContainers() : string {
+        $envVariableName = 'AIO_COMMUNITY_CONTAINERS';
+        $configName = 'aio_community_containers';
+        $defaultValue = '';
+        return $this->GetEnvironmentalVariableOrConfig($envVariableName, $configName, $defaultValue);
+    }
+
+    public function GetEnabledCommunityContainers() : array {
+        return explode(' ', $this->GetCommunityContainers());
+    }
+
     private function GetEnabledDriDevice() : string {
         $envVariableName = 'NEXTCLOUD_ENABLE_DRI_DEVICE';
         $configName = 'nextcloud_enable_dri_device';
@@ -871,6 +904,21 @@ class ConfigurationManager
             return true;
         } else {
             return false;
+        }
+    }
+
+    private function GetKeepDisabledApps() : string {
+        $envVariableName = 'NEXTCLOUD_KEEP_DISABLED_APPS';
+        $configName = 'nextcloud_keep_disabled_apps';
+        $defaultValue = '';
+        return $this->GetEnvironmentalVariableOrConfig($envVariableName, $configName, $defaultValue);
+    }
+
+    public function shouldDisabledAppsGetRemoved() : bool {
+        if ($this->GetKeepDisabledApps() === 'true') {
+            return false;
+        } else {
+            return true;
         }
     }
 }

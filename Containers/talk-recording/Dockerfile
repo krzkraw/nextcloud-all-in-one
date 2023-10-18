@@ -1,8 +1,8 @@
-FROM python:3.11.4-alpine3.18
+FROM python:3.12.0-alpine3.18
 
 COPY --chmod=775 start.sh /start.sh
 
-ENV RECORDING_VERSION v17.0.3
+ENV RECORDING_VERSION v17.1.1
 ENV ALLOW_ALL false
 ENV HPB_PROTOCOL https
 ENV SKIP_VERIFY false
@@ -30,7 +30,7 @@ RUN set -ex; \
     echo "root:$(openssl rand -base64 12)" | chpasswd; \
     git clone --recursive https://github.com/nextcloud/spreed --depth=1 --single-branch --branch "$RECORDING_VERSION" /src; \
     mv -v /src/recording/pyproject.toml /src/recording/src/pyproject.toml; \
-    python3 -m pip install /src/recording/src; \
+    python3 -m pip install --no-cache-dir /src/recording/src; \
     rm -rf /src; \
     touch /etc/recording.conf; \
     chown recording:recording -R \

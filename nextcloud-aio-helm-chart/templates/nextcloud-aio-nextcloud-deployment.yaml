@@ -2,12 +2,12 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   annotations:
-    kompose.cmd: kompose convert -c -f latest.yml --namespace {{ values.NAMESPACE }}
-    kompose.version: 1.30.0 (9d8dcb518)
+    kompose.cmd: kompose convert -c -f latest.yml --namespace {{ .Values.NAMESPACE }}
+    kompose.version: 1.31.2 (a92241f79)
   labels:
     io.kompose.service: nextcloud-aio-nextcloud
   name: nextcloud-aio-nextcloud
-  namespace: {{ values.NAMESPACE }}
+  namespace: {{ .Values.NAMESPACE }}
 spec:
   replicas: 1
   selector:
@@ -16,8 +16,8 @@ spec:
   template:
     metadata:
       annotations:
-        kompose.cmd: kompose convert -c -f latest.yml --namespace {{ values.NAMESPACE }}
-        kompose.version: 1.30.0 (9d8dcb518)
+        kompose.cmd: kompose convert -c -f latest.yml --namespace {{ .Values.NAMESPACE }}
+        kompose.version: 1.31.2 (a92241f79)
       labels:
         io.kompose.network/nextcloud-aio: "true"
         io.kompose.service: nextcloud-aio-nextcloud
@@ -30,10 +30,7 @@ spec:
             - "777"
             - /nextcloud-aio-nextcloud
             - /nextcloud-aio-nextcloud-trusted-cacerts
-            - /nextcloud-aio-nextcloud-tmpfs0
           volumeMounts:
-            - name: nextcloud-aio-nextcloud-tmpfs0
-              mountPath: /nextcloud-aio-nextcloud-tmpfs0
             - name: nextcloud-aio-nextcloud-trusted-cacerts
               mountPath: /nextcloud-aio-nextcloud-trusted-cacerts
             - name: nextcloud-aio-nextcloud
@@ -60,6 +57,8 @@ spec:
               value: "{{ .Values.FULLTEXTSEARCH_ENABLED }}"
             - name: FULLTEXTSEARCH_HOST
               value: nextcloud-aio-fulltextsearch
+            - name: FULLTEXTSEARCH_PASSWORD
+              value: "{{ .Values.FULLTEXTSEARCH_PASSWORD }}"
             - name: IMAGINARY_ENABLED
               value: "{{ .Values.IMAGINARY_ENABLED }}"
             - name: IMAGINARY_HOST
@@ -100,6 +99,8 @@ spec:
               value: nextcloud-aio-redis
             - name: REDIS_HOST_PASSWORD
               value: "{{ .Values.REDIS_PASSWORD }}"
+            - name: REMOVE_DISABLED_APPS
+              value: "{{ .Values.REMOVE_DISABLED_APPS }}"
             - name: SIGNALING_SECRET
               value: "{{ .Values.SIGNALING_SECRET }}"
             - name: STARTUP_APPS
@@ -120,11 +121,12 @@ spec:
               value: "{{ .Values.TIMEZONE }}"
             - name: UPDATE_NEXTCLOUD_APPS
               value: "{{ .Values.UPDATE_NEXTCLOUD_APPS }}"
-          image: nextcloud/aio-nextcloud:20230728_085937-latest
+          image: nextcloud/aio-nextcloud:20231016_081107-latest
           name: nextcloud-aio-nextcloud
           ports:
             - containerPort: 9000
-              hostPort: 9000
+              protocol: TCP
+            - containerPort: 9001
               protocol: TCP
           volumeMounts:
             - mountPath: /var/www/html
@@ -134,8 +136,6 @@ spec:
             - mountPath: /usr/local/share/ca-certificates
               name: nextcloud-aio-nextcloud-trusted-cacerts
               readOnly: true
-            - mountPath: /tmp
-              name: nextcloud-aio-nextcloud-tmpfs0
       volumes:
         - name: nextcloud-aio-nextcloud
           persistentVolumeClaim:
@@ -146,5 +146,3 @@ spec:
         - name: nextcloud-aio-nextcloud-trusted-cacerts
           persistentVolumeClaim:
             claimName: nextcloud-aio-nextcloud-trusted-cacerts
-        - emptyDir: {}
-          name: nextcloud-aio-nextcloud-tmpfs0

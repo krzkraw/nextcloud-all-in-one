@@ -12,7 +12,7 @@ elif [ -z "$REDIS_HOST" ]; then
 fi
 
 # Only start container if nextcloud is accessible
-while ! nc -z "$NEXTCLOUD_HOST" 9000; do
+while ! nc -z "$NEXTCLOUD_HOST" 9001; do
     echo "Waiting for Nextcloud to start..."
     sleep 5
 done
@@ -25,6 +25,21 @@ if [ -z "$CPU_ARCH" ]; then
     exit 1
 elif [ "$CPU_ARCH" != "x86_64" ]; then
     export CPU_ARCH="aarch64"
+fi
+
+# Add warning
+if ! [ -f /nextcloud/custom_apps/notify_push/bin/"$CPU_ARCH"/notify_push ]; then
+    echo "The notify_push binary was not found."
+    echo "Most likely is DNS resolution not working correctly."
+    echo "You can try to fix this by configuring a DNS server globally in dockers daemon.json."
+    echo "See https://dockerlabs.collabnix.com/intermediate/networking/Configuring_DNS.html"
+    echo "Afterwards a restart of docker should automatically resolve this."
+    echo "Additionally, make sure to disable VPN software that might be running on your server"
+    echo "Also check your firewall if it blocks connections to github"
+    echo "If it should still not work afterwards, feel free to create a new thread at https://github.com/nextcloud/all-in-one/discussions/new?category=questions and post the Nextcloud container logs there."
+    echo ""
+    echo ""
+    exit 1
 fi
 
 # Set sensitive values as env

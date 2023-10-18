@@ -1,4 +1,4 @@
-FROM alpine:3.18.3
+FROM alpine:3.18.4
 
 RUN set -ex; \
     \
@@ -16,6 +16,7 @@ VOLUME /root
 COPY --chmod=770 *.sh /
 
 ENTRYPOINT ["/start.sh"]
+# hadolint ignore=DL3002
 USER root
 
 LABEL com.centurylinklabs.watchtower.enable="false"

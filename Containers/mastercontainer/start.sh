@@ -179,7 +179,7 @@ It is set to '$APACHE_PORT'."
     fi
 fi
 if [ -n "$APACHE_IP_BINDING" ]; then
-    if ! echo "$APACHE_IP_BINDING" | grep -q '^[0-9.]\+$'; then
+    if ! echo "$APACHE_IP_BINDING" | grep -q '^[0-9]\+\.[0-9]\+\.[0-9]\+\.[0-9]\+$\|^[0-9a-f:]\+$'; then
         print_red "You provided an ip-address for the apache container's ip-binding but it was not a valid ip-address.
 It is set to '$APACHE_IP_BINDING'."
         exit 1
@@ -241,6 +241,20 @@ It is set to '$NEXTCLOUD_ADDITIONAL_PHP_EXTENSIONS'."
         exit 1
     fi
 fi
+if [ -n "$AIO_COMMUNITY_CONTAINERS" ]; then
+    read -ra AIO_CCONTAINERS <<< "$AIO_COMMUNITY_CONTAINERS"
+    for container in "${AIO_CCONTAINERS[@]}"; do
+        if ! [ -d "/var/www/docker-aio/community-containers/$container" ]; then
+            print_red "The community container $container was not found!"
+            FAIL_CCONTAINERS=1
+        fi
+    done
+    if [ -n "$FAIL_CCONTAINERS" ]; then
+        print_red "You've set AIO_COMMUNITY_CONTAINERS but at least one container was not found.
+It is set to '$AIO_COMMUNITY_CONTAINERS'."
+        exit 1
+    fi
+fi
 
 # Check DNS resolution
 # Prevents issues like https://github.com/nextcloud/all-in-one/discussions/565
@@ -251,6 +265,35 @@ if [ "$?" = 6 ]; then
     echo "You should be able to fix this by following https://dockerlabs.collabnix.com/intermediate/networking/Configuring_DNS.html"
     echo "Apart from that, there has been this: https://github.com/nextcloud/all-in-one/discussions/2065"
     exit 1
+fi
+
+# Check that no changes have been made to timezone settings since AIO only supports running in Etc/UTC timezone
+if [ -n "$TZ" ]; then
+    print_red "The environmental variable TZ has been set which is not supported by AIO since it only supports running in the default Etc/UTC timezone!"
+    echo "The correct timezone can be set in the AIO interface later on!"
+    # Disable exit since it seems to be by default set on unraid and we dont want to break these instances
+    # exit 1
+fi
+if mountpoint -q /etc/localtime; then
+    print_red "/etc/localtime has been mounted into the container which is not allowed because AIO only supports running in the default Etc/UTC timezone!"
+    echo "The correct timezone can be set in the AIO interface later on!"
+    exit 1
+fi
+if mountpoint -q /etc/timezone; then
+    print_red "/etc/timezone has been mounted into the container which is not allowed because AIO only supports running in the default Etc/UTC timezone!"
+    echo "The correct timezone can be set in the AIO interface later on!"
+    exit 1
+fi
+
+# Check if unsupported env are set (but don't exit as it would break many instances)
+if [ -n "$APACHE_DISABLE_REWRITE_IP" ]; then
+    print_red "The environmental variable APACHE_DISABLE_REWRITE_IP has been set which is not supported by AIO. Please remove it!"
+fi
+if [ -n "$NEXTCLOUD_TRUSTED_DOMAINS" ]; then
+    print_red "The environmental variable NEXTCLOUD_TRUSTED_DOMAINS has been set which is not supported by AIO. Please remove it!"
+fi
+if [ -n "$TRUSTED_PROXIES" ]; then
+    print_red "The environmental variable TRUSTED_PROXIES has been set which is not supported by AIO. Please remove it!"
 fi
 
 # Add important folders

@@ -48,7 +48,11 @@ class DockerActionManager
     }
 
     private function BuildImageName(Container $container) : string {
-        return $container->GetContainerName() . ':' . $this->GetCurrentChannel();
+        $tag = $container->GetImageTag();
+        if ($tag === '%AIO_CHANNEL%') {
+            $tag = $this->GetCurrentChannel();
+        }
+        return $container->GetContainerName() . ':' . $tag;
     }
 
     public function GetContainerRunningState(Container $container) : IContainerState
@@ -95,7 +99,10 @@ class DockerActionManager
 
     public function GetContainerUpdateState(Container $container) : IContainerState
     {
-        $tag = $this->GetCurrentChannel();
+        $tag = $container->GetImageTag();
+        if ($tag === '%AIO_CHANNEL%') {
+            $tag = $this->GetCurrentChannel();
+        }
 
         $runningDigests = $this->GetRepoDigestsOfContainer($container->GetIdentifier());
         if ($runningDigests === null) {
@@ -241,6 +248,15 @@ class DockerActionManager
             $this->configurationManager->GetAndGenerateSecret($secret);
         }
 
+        $aioVariables = $container->GetAioVariables()->GetVariables();
+        foreach($aioVariables as $variable) {
+            $config = $this->configurationManager->GetConfig();
+            $variableArray = explode('=', $variable);
+            $config[$variableArray[0]] = $variableArray[1];
+            $this->configurationManager->WriteConfig($config);
+            sleep(1);
+        }
+
         $envs = $container->GetEnvironmentVariables()->GetVariables();
         // Special thing for the nextcloud container
         if ($container->GetIdentifier() === 'nextcloud-aio-nextcloud') {
@@ -339,6 +355,12 @@ class DockerActionManager
                     } else {
                         $replacements[1] = '';
                     }
+                } elseif ($out[1] === 'DOCKER_SOCKET_PROXY_ENABLED') {
+                    if ($this->configurationManager->isDockerSocketProxyEnabled()) {
+                        $replacements[1] = 'yes';
+                    } else {
+                        $replacements[1] = '';
+                    }
                 } elseif ($out[1] === 'NEXTCLOUD_UPLOAD_LIMIT') {
                     $replacements[1] = $this->configurationManager->GetNextcloudUploadLimit();
                 } elseif ($out[1] === 'NEXTCLOUD_MEMORY_LIMIT') {
@@ -373,6 +395,12 @@ class DockerActionManager
                     } else {
                         $replacements[1] = '';
                     }
+                } elseif ($out[1] === 'REMOVE_DISABLED_APPS') {
+                    if ($this->configurationManager->shouldDisabledAppsGetRemoved()) {
+                        $replacements[1] = 'yes';
+                    } else {
+                        $replacements[1] = '';
+                    }
                 } else {
                     $secret = $this->configurationManager->GetSecret($out[1]);
                     if ($secret === "") {
@@ -396,7 +424,18 @@ class DockerActionManager
         $exposedPorts = [];
         if ($container->GetInternalPort() !== 'host') {
             foreach($container->GetPorts()->GetPorts() as $value) {
-                $portWithProtocol = $value->port . '/' . $value->protocol;
+                $port = $value->port;
+                $protocol = $value->protocol;
+                if ($port === '%APACHE_PORT%') {
+                    $port = $this->configurationManager->GetApachePort();
+                    // Do not expose udp if AIO is in reverse proxy mode
+                    if ($port !== '443' && $protocol === 'udp') {
+                        continue;
+                    }
+                } else if ($port === '%TALK_PORT%') {
+                    $port = $this->configurationManager->GetTalkPort();
+                }
+                $portWithProtocol = $port . '/' . $protocol;
                 $exposedPorts[$portWithProtocol] = null;
             }
             $requestBody['HostConfig']['NetworkMode'] = 'nextcloud-aio';
@@ -408,8 +447,20 @@ class DockerActionManager
             $requestBody['ExposedPorts'] = $exposedPorts;
             foreach ($container->GetPorts()->GetPorts() as $value) {
                 $port = $value->port;
-                $ipBinding = $value->ipBinding;
                 $protocol = $value->protocol;
+                if ($port === '%APACHE_PORT%') {
+                    $port = $this->configurationManager->GetApachePort();
+                    // Do not expose udp if AIO is in reverse proxy mode
+                    if ($port !== '443' && $protocol === 'udp') {
+                        continue;
+                    }
+                } else if ($port === '%TALK_PORT%') {
+                    $port = $this->configurationManager->GetTalkPort();
+                }
+                $ipBinding = $value->ipBinding;
+                if ($ipBinding === '%APACHE_IP_BINDING%') {
+                    $ipBinding = $this->configurationManager->GetApacheIPBinding();
+                }
                 $portWithProtocol = $port . '/' . $protocol;
                 $requestBody['HostConfig']['PortBindings'][$portWithProtocol] = [
                     [
@@ -450,9 +501,16 @@ class DockerActionManager
             $requestBody['HostConfig']['Tmpfs'] =  $tmpfs;
         }
 
+        $requestBody['HostConfig']['Init'] = $container->GetInit();
+
         $capAdds = $container->GetCapAdds();
         if (count($capAdds) > 0) {
             $requestBody['HostConfig']['CapAdd'] = $capAdds;
+        }
+
+        // Disable arp spoofing
+        if (!in_array('NET_RAW', $capAdds, true)) {
+            $requestBody['HostConfig']['CapDrop'] = ['NET_RAW'];
         }
 
         if ($container->isApparmorUnconfined()) {
@@ -490,6 +548,9 @@ class DockerActionManager
                 }
                 $mounts[] = ["Type" => "bind", "Source" => $volume->name, "Target" => $volume->mountPoint, "ReadOnly" => !$volume->isWritable, "BindOptions" => [ "Propagation" => "rshared"]];
             }
+        // Special things for the watchtower and docker-socket-proxy container which should not be exposed in the containers.json
+        } elseif ($container->GetIdentifier() === 'nextcloud-aio-watchtower' || $container->GetIdentifier() === 'nextcloud-aio-docker-socket-proxy') {
+            $requestBody['HostConfig']['SecurityOpt'] = ["label:disable"];
         }
 
         if (count($mounts) > 0) {
@@ -754,13 +815,12 @@ class DockerActionManager
         }
     }
 
-    private function ConnectContainerIdToNetwork(string $id, string $internalPort) : void
+    private function ConnectContainerIdToNetwork(string $id, string $internalPort, string $network = 'nextcloud-aio') : void
     {
         if ($internalPort === 'host') {
             return;
         }
 
-        $network = 'nextcloud-aio';
         $url = $this->BuildApiUrl('networks/create');
         try {
             $this->guzzleClient->request(
@@ -768,7 +828,7 @@ class DockerActionManager
                 $url,
                 [
                     'json' => [
-                        'Name' => 'nextcloud-aio',
+                        'Name' => $network,
                         'CheckDuplicate' => true,
                         'Driver' => 'bridge',
                         'Internal' => false,
@@ -825,7 +885,7 @@ class DockerActionManager
 
     public function ConnectContainerToNetwork(Container $container) : void
     {
-      $this->ConnectContainerIdToNetwork($container->GetIdentifier(), $container->GetInternalPort());
+        $this->ConnectContainerIdToNetwork($container->GetIdentifier(), $container->GetInternalPort());
     }
 
     public function StopContainer(Container $container) : void {

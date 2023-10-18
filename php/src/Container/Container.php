@@ -32,6 +32,10 @@ class Container {
     private array $nextcloudExecCommands;
     private bool $readOnlyRootFs;
     private array $tmpfs;
+    private bool $init;
+    private string $imageTag;
+    private AioVariables $aioVariables;
+    private string $documentation;
     private DockerActionManager $dockerActionManager;
 
     public function __construct(
@@ -54,6 +58,10 @@ class Container {
         array $nextcloudExecCommands,
         bool $readOnlyRootFs,
         array $tmpfs,
+        bool $init,
+        string $imageTag,
+        AioVariables $aioVariables,
+        string $documentation,
         DockerActionManager $dockerActionManager
     ) {
         $this->identifier = $identifier;
@@ -75,6 +83,10 @@ class Container {
         $this->nextcloudExecCommands = $nextcloudExecCommands;
         $this->readOnlyRootFs = $readOnlyRootFs;
         $this->tmpfs = $tmpfs;
+        $this->init = $init;
+        $this->imageTag = $imageTag;
+        $this->aioVariables = $aioVariables;
+        $this->documentation = $documentation;
         $this->dockerActionManager = $dockerActionManager;
     }
 
@@ -94,8 +106,16 @@ class Container {
         return $this->restartPolicy;
     }
 
+    public function GetImageTag() : string {
+        return $this->imageTag;
+    }
+
     public function GetReadOnlySetting() : bool {
         return $this->readOnlyRootFs;
+    }
+
+    public function GetInit() : bool {
+        return $this->init;
     }
 
     public function GetShmSize() : int {
@@ -171,5 +191,13 @@ class Container {
 
     public function GetEnvironmentVariables() : ContainerEnvironmentVariables {
         return $this->containerEnvironmentVariables;
+    }
+
+    public function GetAioVariables() : AioVariables {
+        return $this->aioVariables;
+    }
+
+    public function GetDocumentation() : string {
+        return $this->documentation;
     }
 }

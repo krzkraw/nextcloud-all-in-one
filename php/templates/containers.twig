@@ -16,7 +16,7 @@
     </header>
 
     <div class="content">
-        <h1>Nextcloud AIO v6.4.0</h1>
+        <h1>Nextcloud AIO v7.5.0</h1>
 
         {# Add 2nd tab warning #}
         <script type="text/javascript" src="second-tab-warning.js"></script>
@@ -28,7 +28,7 @@
         {% set isBackupOrRestoreRunning = false %}
         {% set isApacheStarting = false %}
         {# Setting newMajorVersion to '' will hide corresponding options/elements, can be set to an integer like 26 in order to show corresponding elements. If set, also increase installLatestMajor in https://github.com/nextcloud/all-in-one/blob/main/php/src/Controller/DockerController.php #}
-        {% set newMajorVersion = 27 %}
+        {% set newMajorVersion = '' %}
 
         {% if is_backup_container_running == true %}
             {% if borg_backup_mode == 'backup' or borg_backup_mode == 'restore' %}
@@ -257,13 +257,25 @@
                                 <li>
                                     {% if class(container.GetStartingState()) == 'AIO\\Container\\State\\StartingState' %}
                                         <span class="status running"></span>
-                                        <span>{{container.GetDisplayName()}} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Starting</a>)</span>
+                                        <span>{{ container.GetDisplayName() }} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Starting</a>)
+                                        {% if container.GetDocumentation() != '' %}
+                                            (<a href="{{ container.GetDocumentation() }}">docs</a>)
+                                        {% endif %}
+                                        </span>
                                     {% elseif class(container.GetRunningState()) == 'AIO\\Container\\State\\RunningState' %}
                                         <span class="status success"></span>
-                                        <span>{{container.GetDisplayName()}} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Running</a>)</span>
+                                        <span>{{ container.GetDisplayName() }} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Running</a>)
+                                        {% if container.GetDocumentation() != '' %}
+                                            (<a href="{{ container.GetDocumentation() }}">docs</a>)
+                                        {% endif %}
+                                        </span>
                                     {% else %}
                                         <span class="status error"></span>
-                                        <span>{{container.GetDisplayName()}} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Stopped</a>)</span>
+                                        <span>{{ container.GetDisplayName() }} (<a href="/api/docker/logs?id={{ container.GetIdentifier() }}">Stopped</a>)
+                                        {% if container.GetDocumentation() != '' %}
+                                            (<a href="{{ container.GetDocumentation() }}">docs</a>)
+                                        {% endif %}
+                                        </span>
                                     {% endif %}
                                 </li>
                             {% endif %}
@@ -310,7 +322,7 @@
                         Restore or Backup currently running. Cannot start the containers until that's done.<br /><br />
                     {% else %}
                         {% if was_start_button_clicked == false %}
-                            Clicking on the button below will download all docker containers and start them. This can take a lot of time depending on your internect connection. Since the overall size is a few GB, this will take around 5-10 min or more. So be aware and patient!<br><br>
+                            <br>Clicking on the button below will download all docker containers and start them. This can take a lot of time depending on your internet connection. Since the overall size is a few GB, this will take around 5-10 min or more. So be aware and patient!<br><br>
                         {% endif %}
                         {% if is_mastercontainer_update_available == true %}
                             ⚠️ A mastercontainer update is available. Please click on the button below to update it.<br><br>
@@ -469,6 +481,7 @@
                                                 <input type="hidden" name="{{csrf.keys.value}}" value="{{csrf.value}}">
                                                 <input class="button" type="submit" value="Submit backup time" /><br>
                                                 <input type="checkbox" id="automatic_updates" name="automatic_updates" checked="checked"><label for="automatic_updates">Automatically update all containers, the mastercontainer and on saturdays your Nextcloud apps</label><br>
+                                                <input type="checkbox" id="success_notification" name="success_notification" checked="checked"><label for="success_notification">Send notifications about successful backups (notifications about unsuccessful backups will always be sent)</label><br>
                                             </form>
                                         {% else %}
                                             Daily backups will be created at <b>{{ daily_backup_time }} UTC</b> which includes a notification about the result of the backup.
@@ -552,7 +565,7 @@
                         {% if is_fulltextsearch_enabled == true %}
                             <input type="checkbox" id="fulltextsearch" name="fulltextsearch" checked="checked"><label for="fulltextsearch">Fulltextsearch (needs ~1GB additional RAM)</label><br>
                         {% else %}
-                            <input type="checkbox" id="fulltextsearch" name="fulltextsearch"><label for="fulltextsearch">Fulltextsearch (needs ~1GB additional RAM)</label><br>
+                            <input type="checkbox" id="fulltextsearch" name="fulltextsearch"><label for="fulltextsearch">Fulltextsearch (needs ~1GB additional RAM. <b>Please note:</b> the initial indexing can take a long time during which Nextcloud will be unavailable)</label><br><br>
                         {% endif %}
                         {% if is_imaginary_enabled == true %}
                             <input type="checkbox" id="imaginary" name="imaginary" checked="checked"><label for="imaginary">Imaginary (for previews of heic, heif, illustrator, pdf, svg, tiff and webp. Imaginary is currently <a href="https://github.com/nextcloud/server/issues/34262">incompatible with server-side-encryption</a>)</label><br><br>
@@ -574,6 +587,11 @@
                         {% else %}
                             {#<input type="checkbox" id="onlyoffice" name="onlyoffice"><label for="onlyoffice">OnlyOffice</label><br>#}
                         {% endif %}
+                        {% if is_docker_socket_proxy_enabled == true %}
+                            <input type="checkbox" id="docker-socket-proxy" name="docker-socket-proxy" checked="checked"><label for="docker-socket-proxy">Docker Socket Proxy (needed for <a href="https://github.com/cloud-py-api/app_api#nextcloud-appapi">Nextcloud App API</a>)</label><br><br>
+                        {% else %}
+                            <input type="checkbox" id="docker-socket-proxy" name="docker-socket-proxy"><label for="docker-socket-proxy">Docker Socket Proxy (needed for <a href="https://github.com/cloud-py-api/app_api#nextcloud-appapi">Nextcloud App API</a>)</label><br><br>
+                        {% endif %}
                         <input id="options-form-submit" class="button" type="submit" value="Save changes" />
                         <script type="text/javascript" src="options-form-submit.js"></script>
                     </form>
@@ -582,6 +600,7 @@
                         <script type="text/javascript" src="disable-clamav.js"></script>
                     {% endif %}
                     {% if isAnyRunning == true %}
+                        <script type="text/javascript" src="disable-docker-socket-proxy.js"></script>
                         <script type="text/javascript" src="disable-talk.js"></script>
                         <script type="text/javascript" src="disable-collabora.js"></script>
                         <script type="text/javascript" src="disable-onlyoffice.js"></script>
@@ -629,7 +648,7 @@
                                 <input type="hidden" name="{{csrf.keys.value}}" value="{{csrf.value}}">
                                 <input class="button" type="submit" value="Submit timezone" onclick="return confirm('Are you sure that this is a valid timezone? Please double check by following the wikipedia article and checking the correct column since if not, it will break the startup since the database will not get correctly initialized and you will end in a startup loop.')" />
                             </form>
-                            You need to make sure that the timezone that you enter is valid. An example is <b>Europe/Berlin</b>. You can get valid values by looking at the 'TZ database name' column of this list: <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List"><b>click here</b></a>. The default is <b>Etc/UTC<b> if nothing is entered.<br><br>
+                            You need to make sure that the timezone that you enter is valid. An example is <b>Europe/Berlin</b>. You can get valid values by looking at the 'TZ database name' column of this list: <a href="https://en.wikipedia.org/wiki/List_of_tz_database_time_zones#List"><b>click here</b></a>. The default is <b>Etc/UTC</b> if nothing is entered.<br><br>
                         {% else %}
                             The timezone for Nextcloud is currently set to <b>{{ timezone }}</b>. You can reset the timezone again by clicking on the button below.<br><br/>
                             <form method="POST" action="/api/configuration" class="xhr">

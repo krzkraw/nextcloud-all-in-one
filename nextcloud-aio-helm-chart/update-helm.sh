@@ -10,8 +10,7 @@ rm -f ./helm-chart/values.yaml
 rm -rf ./helm-chart/templates
 
 # Install kompose
-LATEST_KOMPOSE="$(git ls-remote --tags https://github.com/kubernetes/kompose.git | cut -d/ -f3 | grep -viE -- 'rc|b' | sort -V | tail -1)"
-curl -L https://github.com/kubernetes/kompose/releases/download/"$LATEST_KOMPOSE"/kompose-linux-amd64 -o kompose
+curl -L https://github.com/kubernetes/kompose/releases/latest/download/kompose-linux-amd64 -o kompose
 chmod +x kompose
 sudo mv ./kompose /usr/local/bin/kompose
 
@@ -43,6 +42,9 @@ sed -i "s|\${NEXTCLOUD_TRUSTED_CACERTS_DIR}:|nextcloud_aio_nextcloud_trusted_cac
 sed -i 's|\${|{{ .Values.|g' latest.yml
 sed -i 's|}| }}|g' latest.yml
 yq -i 'del(.services.[].profiles)' latest.yml
+# Delete read_only and tmpfs setting while https://github.com/kubernetes/kubernetes/issues/48912 is not fixed
+yq -i 'del(.services.[].read_only)' latest.yml
+yq -i 'del(.services.[].tmpfs)' latest.yml
 cat latest.yml
 kompose convert -c -f latest.yml --namespace nextcloud-aio-namespace
 cd latest
@@ -115,7 +117,7 @@ for variable in "${DEPLOYMENTS[@]}"; do
     fi
 done
 # shellcheck disable=SC1083
-find ./ -name '*.yaml' -exec sed -i "s|nextcloud-aio-namespace|\{\{ values.NAMESPACE \}\}|" \{} \; 
+find ./ -name '*.yaml' -exec sed -i "s|nextcloud-aio-namespace|\{\{ .Values.NAMESPACE \}\}|" \{} \; 
 # shellcheck disable=SC1083
 find ./ -name '*service.yaml' -exec sed -i "/^status:/,$ d" \{} \; 
 # shellcheck disable=SC1083
@@ -124,6 +126,8 @@ find ./ -name '*deployment.yaml' -exec sed -i "s|manual-install-nextcloud-aio|ne
 find ./ -name '*deployment.yaml' -exec sed -i "/medium: Memory/d" \{} \;
 # shellcheck disable=SC1083
 find ./ -name '*deployment.yaml' -exec sed -i "s|emptyDir:|emptyDir: \{\}|" \{} \; 
+# shellcheck disable=SC1083
+find ./ -name '*deployment.yaml' -exec sed -i "/hostPort:/d" \{} \; 
 # shellcheck disable=SC1083
 find ./ -name '*persistentvolumeclaim.yaml' -exec sed -i "s|ReadOnlyMany|ReadWriteOnce|" \{} \;   
 # shellcheck disable=SC1083
@@ -155,7 +159,7 @@ for port in "${INTERNAL_TALK_PORTS[@]}"; do
 done
 echo '---' >>  /tmp/talk-service.copy
 # shellcheck disable=SC1083
-find ./ -name '*talk-service.yaml' -exec grep -v '{{ .Values.*}}\|protocol: UDP\|type: LoadBalancer' \{} \; >> /tmp/talk-service.copy
+find ./ -name '*talk-service.yaml' -exec grep -v '{{ .Values.TALK.*}}\|protocol: UDP\|type: LoadBalancer' \{} \; >> /tmp/talk-service.copy
 # shellcheck disable=SC1083
 find ./ -name '*talk-service.yaml' -exec mv /tmp/talk-service.copy \{} \;
 # shellcheck disable=SC1083

@@ -282,6 +282,8 @@ DATADIR_PERMISSION_CONF
                         touch "$NEXTCLOUD_DATA_DIR/install.failed"
                         exit 1
                     fi
+                    # shellcheck disable=SC2016
+                    installed_version="$(php -r 'require "/var/www/html/version.php"; echo implode(".", $OC_Version);')"
                 fi
                 php /var/www/html/occ app:disable updatenotification
                 rm -rf /var/www/html/apps/updatenotification
@@ -362,6 +364,9 @@ DATADIR_PERMISSION_CONF
                 bash /notify.sh "Nextcloud update to $image_version failed!" "Please restore from backup!"
                 exit 1
             fi
+
+            # shellcheck disable=SC2016
+            installed_version="$(php -r 'require "/var/www/html/version.php"; echo implode(".", $OC_Version);')"
 
             rm "$NEXTCLOUD_DATA_DIR/update.failed"
             bash /notify.sh "Nextcloud update to $image_version successful!" "Feel free to inspect the Nextcloud container logs for more info."
@@ -476,10 +481,14 @@ php /var/www/html/occ config:system:set updatedirectory --value="/nc-updater"
 
 # Apply network settings
 echo "Applying network settings..."
+php /var/www/html/occ config:system:set davstorage.request_timeout --value="$PHP_MAX_TIME" --type=int
 php /var/www/html/occ config:system:set trusted_domains 1 --value="$NC_DOMAIN"
 php /var/www/html/occ config:system:set overwrite.cli.url --value="https://$NC_DOMAIN/"
 php /var/www/html/occ config:system:set htaccess.RewriteBase --value="/"
 php /var/www/html/occ maintenance:update:htaccess
+
+# Revert dbpersistent setting to check if it fixes too many db connections
+php /var/www/html/occ config:system:set dbpersistent --value=false --type=bool
 
 # Disallow creating local external storages when nothing was mounted
 if [ -z "$NEXTCLOUD_MOUNT" ]; then
@@ -518,11 +527,8 @@ if [ "$COLLABORA_ENABLED" = 'yes' ]; then
     # Fix https://github.com/nextcloud/all-in-one/issues/188:
     php /var/www/html/occ config:system:set allow_local_remote_servers --type=bool --value=true
     # Make collabora more save
-    COLLABORA_IPv4_ADDRESS="$(echo "<?php echo gethostbyname('$NC_DOMAIN');" | php | head -1)"
-    COLLABORA_IPv6_ADDRESS="<?php \$record = dns_get_record('$NC_DOMAIN', DNS_AAAA);"
-    # shellcheck disable=SC2016
-    COLLABORA_IPv6_ADDRESS+='if (!empty($record)) {echo $record[0]["ipv6"];}'
-    COLLABORA_IPv6_ADDRESS="$(echo "$COLLABORA_IPv6_ADDRESS" | php | head -1)"
+    COLLABORA_IPv4_ADDRESS="$(dig "$NC_DOMAIN" A +short | grep '^[0-9.]\+$' | sort | head -n1)"
+    COLLABORA_IPv6_ADDRESS="$(dig "$NC_DOMAIN" AAAA +short | grep '^[0-9a-f:]\+$' | sort | head -n1)"
     COLLABORA_ALLOW_LIST="$(php /var/www/html/occ config:app:get richdocuments wopi_allowlist)"
     if [ -n "$COLLABORA_IPv4_ADDRESS" ]; then
         if ! echo "$COLLABORA_ALLOW_LIST" | grep -q "$COLLABORA_IPv4_ADDRESS"; then
@@ -556,7 +562,7 @@ if [ "$COLLABORA_ENABLED" = 'yes' ]; then
         echo "Warning: wopi_allowlist is empty which should not be the case!"
     fi
 else
-    if [ -d "/var/www/html/custom_apps/richdocuments" ]; then
+    if [ "$REMOVE_DISABLED_APPS" = yes ] && [ -d "/var/www/html/custom_apps/richdocuments" ]; then
         php /var/www/html/occ app:remove richdocuments
     fi
 fi
@@ -580,7 +586,7 @@ if [ "$ONLYOFFICE_ENABLED" = 'yes' ]; then
     php /var/www/html/occ config:app:set onlyoffice DocumentServerUrl --value="https://$NC_DOMAIN/onlyoffice"
     php /var/www/html/occ config:system:set allow_local_remote_servers --type=bool --value=true
 else
-    if [ -d "/var/www/html/custom_apps/onlyoffice" ] && [ -n "$ONLYOFFICE_SECRET" ] && [ "$(php /var/www/html/occ config:system:get onlyoffice jwt_secret)" = "$ONLYOFFICE_SECRET" ]; then
+    if [ "$REMOVE_DISABLED_APPS" = yes ] && [ -d "/var/www/html/custom_apps/onlyoffice" ] && [ -n "$ONLYOFFICE_SECRET" ] && [ "$(php /var/www/html/occ config:system:get onlyoffice jwt_secret)" = "$ONLYOFFICE_SECRET" ]; then
         php /var/www/html/occ app:remove onlyoffice
     fi
 fi
@@ -607,7 +613,7 @@ if [ "$TALK_ENABLED" = 'yes' ]; then
         php /var/www/html/occ talk:signaling:add "https://$NC_DOMAIN/standalone-signaling/" "$SIGNALING_SECRET" --verify
     fi
 else
-    if [ -d "/var/www/html/custom_apps/spreed" ]; then
+    if [ "$REMOVE_DISABLED_APPS" = yes ] && [ -d "/var/www/html/custom_apps/spreed" ]; then
         php /var/www/html/occ app:remove spreed
     fi
 fi
@@ -654,7 +660,7 @@ if [ "$CLAMAV_ENABLED" = 'yes' ]; then
         php /var/www/html/occ config:app:set files_antivirus av_infected_action --value="only_log"
     fi
 else
-    if [ -d "/var/www/html/custom_apps/files_antivirus" ]; then
+    if [ "$REMOVE_DISABLED_APPS" = yes ] && [ -d "/var/www/html/custom_apps/files_antivirus" ]; then
         php /var/www/html/occ app:remove files_antivirus
     fi
 fi
@@ -701,7 +707,7 @@ if [ "$FULLTEXTSEARCH_ENABLED" = 'yes' ]; then
         php /var/www/html/occ app:update files_fulltextsearch
     fi
     php /var/www/html/occ fulltextsearch:configure '{"search_platform":"OCA\\FullTextSearch_Elasticsearch\\Platform\\ElasticSearchPlatform"}'
-    php /var/www/html/occ fulltextsearch_elasticsearch:configure "{\"elastic_host\":\"http://$FULLTEXTSEARCH_HOST:9200\",\"elastic_index\":\"nextcloud-aio\"}"
+    php /var/www/html/occ fulltextsearch_elasticsearch:configure "{\"elastic_host\":\"http://elastic:$FULLTEXTSEARCH_PASSWORD@$FULLTEXTSEARCH_HOST:9200\",\"elastic_index\":\"nextcloud-aio\"}"
     php /var/www/html/occ files_fulltextsearch:configure "{\"files_pdf\":\"1\",\"files_office\":\"1\"}"
 
     # Do the index
@@ -717,14 +723,33 @@ if [ "$FULLTEXTSEARCH_ENABLED" = 'yes' ]; then
         fi
     fi
 else
-    if [ -d "/var/www/html/custom_apps/fulltextsearch" ]; then
-        php /var/www/html/occ app:remove fulltextsearch
+    if [ "$REMOVE_DISABLED_APPS" = yes ]; then
+        if [ -d "/var/www/html/custom_apps/fulltextsearch" ]; then
+            php /var/www/html/occ app:remove fulltextsearch
+        fi
+        if [ -d "/var/www/html/custom_apps/fulltextsearch_elasticsearch" ]; then
+            php /var/www/html/occ app:remove fulltextsearch_elasticsearch
+        fi
+        if [ -d "/var/www/html/custom_apps/files_fulltextsearch" ]; then
+            php /var/www/html/occ app:remove files_fulltextsearch
+        fi
     fi
-    if [ -d "/var/www/html/custom_apps/fulltextsearch_elasticsearch" ]; then
-        php /var/www/html/occ app:remove fulltextsearch_elasticsearch
-    fi
-    if [ -d "/var/www/html/custom_apps/files_fulltextsearch" ]; then
-        php /var/www/html/occ app:remove files_fulltextsearch
+fi
+
+# Docker socket proxy
+if version_greater "$installed_version" "27.1.2.0"; then
+    if [ "$DOCKER_SOCKET_PROXY_ENABLED" = 'yes' ]; then
+        if ! [ -d "/var/www/html/custom_apps/app_api" ]; then
+            php /var/www/html/occ app:install app_api
+        elif [ "$(php /var/www/html/occ config:app:get app_api enabled)" != "yes" ]; then
+            php /var/www/html/occ app:enable app_api
+        elif [ "$SKIP_UPDATE" != 1 ]; then
+            php /var/www/html/occ app:update app_api
+        fi
+    else
+        if [ "$REMOVE_DISABLED_APPS" = yes ] && [ -d "/var/www/html/custom_apps/app_api" ]; then
+            php /var/www/html/occ app:remove app_api
+        fi
     fi
 fi
 

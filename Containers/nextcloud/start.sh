@@ -6,13 +6,23 @@ while ! sudo -u www-data nc -z "$POSTGRES_HOST" 5432; do
     sleep 5
 done
 
-# Wait for database to actually start
+# Use the correct Postgres username
+POSTGRES_USER="oc_$POSTGRES_USER"
+export POSTGRES_USER
+
+# Fix false database connection on old instances
 if [ -f "/var/www/html/config/config.php" ]; then
     sleep 2
     while ! sudo -u www-data psql -d "postgresql://$POSTGRES_USER:$POSTGRES_PASSWORD@$POSTGRES_HOST:5432/$POSTGRES_DB" -c "select now()"; do
         echo "Waiting for the database to start..."
         sleep 5
     done
+    if [ "$POSTGRES_USER" = "oc_nextcloud" ] && [ "$POSTGRES_DB" = "nextcloud_database" ] && echo "$POSTGRES_PASSWORD" | grep -q '^[a-z0-9]\+$'; then
+        # This was introduced with https://github.com/nextcloud/all-in-one/pull/218
+        sed -i "s|'dbuser'.*=>.*$|'dbuser' => '$POSTGRES_USER',|" /var/www/html/config/config.php
+        sed -i "s|'dbpassword'.*=>.*$|'dbpassword' => '$POSTGRES_PASSWORD',|" /var/www/html/config/config.php
+        sed -i "s|'db_name'.*=>.*$|'db_name' => '$POSTGRES_DB',|" /var/www/html/config/config.php
+    fi
 fi
 
 # Trust additional Cacerts, if the user provided $TRUSTED_CACERTS_DIR
@@ -24,7 +34,7 @@ fi
 # Check if /dev/dri device is present and apply correct permissions
 set -x
 if ! [ -f "/dev-dri-group-was-added" ] && [ -n "$(find /dev -maxdepth 1 -mindepth 1 -name dri)" ] && [ -n "$(find /dev/dri -maxdepth 1 -mindepth 1 -name renderD128)" ]; then
-    # From https://github.com/pulsejet/memories/wiki/QSV-Transcoding#docker-installations
+    # From https://memories.gallery/hw-transcoding/#docker-installations
     GID="$(stat -c "%g" /dev/dri/renderD128)"
     groupadd -g "$GID" render2 || true # sometimes this is needed
     GROUP="$(getent group "$GID" | cut -d: -f1)"
@@ -109,7 +119,7 @@ if [ -n "$ADDITIONAL_PHP_EXTENSIONS" ]; then
                     | awk 'system("[ -e /usr/local/lib/" $1 " ]") == 0 { next } { print "so:" $1 }' \
             )";
             # shellcheck disable=SC2086
-            apk add --virtual .nextcloud-phpext-rundeps $runDeps >/dev/null
+            apk add --no-cache --virtual .nextcloud-phpext-rundeps $runDeps >/dev/null
             apk del .build-deps >/dev/null
         fi
     fi
@@ -120,5 +130,20 @@ fi
 if ! sudo -E -u www-data bash /entrypoint.sh; then
     exit 1
 fi
+
+while [ -z "$(dig nextcloud-aio-apache A +short)" ]; do
+    echo "Waiting for nextcloud-aio-apache to start..."
+    sleep 5
+done
+IPv4_ADDRESS_APACHE="$(dig nextcloud-aio-apache A +short | grep '^[0-9.]\+$' | sort | head -n1)"
+IPv6_ADDRESS_APACHE="$(dig nextcloud-aio-apache AAAA +short | grep '^[0-9a-f:]\+$' | sort | head -n1)"
+IPv4_ADDRESS_MASTERCONTAINER="$(dig nextcloud-aio-mastercontainer A +short | grep '^[0-9.]\+$' | sort | head -n1)"
+IPv6_ADDRESS_MASTERCONTAINER="$(dig nextcloud-aio-mastercontainer AAAA +short | grep '^[0-9a-f:]\+$' | sort | head -n1)"
+
+sed -i "s|^;listen.allowed_clients|listen.allowed_clients|" /usr/local/etc/php-fpm.d/www.conf
+sed -i "s|listen.allowed_clients.*|listen.allowed_clients = 127.0.0.1,::1,$IPv4_ADDRESS_APACHE,$IPv6_ADDRESS_APACHE,$IPv4_ADDRESS_MASTERCONTAINER,$IPv6_ADDRESS_MASTERCONTAINER|" /usr/local/etc/php-fpm.d/www.conf
+sed -i "/^listen.allowed_clients/s/,,/,/g" /usr/local/etc/php-fpm.d/www.conf
+sed -i "/^listen.allowed_clients/s/,$//" /usr/local/etc/php-fpm.d/www.conf
+grep listen.allowed_clients /usr/local/etc/php-fpm.d/www.conf
 
 exec "$@"
