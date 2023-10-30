@@ -4,7 +4,7 @@ A [reverse proxy](https://en.wikipedia.org/wiki/Reverse_proxy) is basically a we
 
 **Please note:** Publishing the AIO interface with a valid certificate to the public internet is **not** the goal of this documentation! Instead, the main goal is to publish Nextcloud with a valid certificate to the public internet which is **not** running inside the mastercontainer but in a different container! If you need a valid certificate for the AIO interface, see [point 5](#5-optional-get-a-valid-certificate-for-the-aio-interface).
 
-In order to run Nextcloud behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else), you need to specify the port that AIO's Apache container shall use, add a specific config to your web server or reverse proxy and modify the startup command a bit. All examples below will use port `11000` as example `APACHE_PORT` which will be exposed on the host to receive unencrypted HTTP traffic from the reverse proxy.
+In order to run Nextcloud behind a web server or reverse proxy (like Apache, Nginx, Cloudflare Tunnel and else), you need to specify the port that AIO's Apache container shall use, add a specific config to your web server or reverse proxy and modify the startup command a bit. All examples below will use port `11000` as example `APACHE_PORT` which will be exposed on the host to receive unencrypted HTTP traffic from the reverse proxy. **Advice:** If you need https between Nextcloud and the reverse proxy because it is running on a different server in the same network, simply add another reverse proxy to the chain that runs on the same server like AIO and takes care of https proxying (most likely via self-signed cert). Another option is to create a VPN between the server that runs AIO and the server that runs the reverse proxy which takes care of encrypting the connection.
 
 **Attention:** The process to run Nextcloud behind a reverse proxy consists of at least steps 1, 2 and 4:
 1. **Configure the reverse proxy! See [point 1](#1-add-this-to-your-reverse-proxy-config)**
@@ -147,7 +147,7 @@ You can get AIO running using the ACME DNS-challenge. Here is how to do it.
 
     You also need to adjust `<provider>` and `<key>` to match your case.
 
-1. Now continue with [point 2](#2-use-this-startup-command) but additionally, add `--env SKIP_DOMAIN_VALIDATION=true` to the docker run command of the mastercontainer (but before the last line `nextcloud/all-in-one:latest`) which will disable the dommain validation (because it is known that the domain validation will not when using the DNS-challenge since no port is publicly opened.
+1. Now continue with [point 2](#2-use-this-startup-command) but additionally, add `--env SKIP_DOMAIN_VALIDATION=true` to the docker run command of the mastercontainer (but before the last line `nextcloud/all-in-one:latest`) which will disable the domain validation (because it is known that the domain validation will not work when using the DNS-challenge since no port is publicly opened).
 
 **Advice:** In order to make it work in your home network, you may add the internal ipv4-address of your reverse proxy as A DNS-record to your domain and disable the dns-rebind-protection in your router. Another way it to set up a local dns-server like a pi-hole and set up a custom dns-record for that domain that points to the internal ip-adddress of your reverse proxy (see https://github.com/nextcloud/all-in-one#how-can-i-access-nextcloud-locally). If both is not possible, you may add the domain to the hosts file which is needed then for any devices that shall use the server.
 
@@ -169,11 +169,11 @@ For a reverse proxy example guide for Citrix ADC VPX / Citrix Netscaler, see thi
 
 <summary>click here to expand</summary>
 
-Although it does not seems like it is the case but from AIO perspective a Cloudflare Tunnel works like a reverse proxy. Please see the [caveats](https://github.com/nextcloud/all-in-one#notes-on-cloudflare-proxytunnel) before proceeding. Here is then how to make it work:
+Although it does not seem like it is the case but from AIO perspective a Cloudflare Tunnel works like a reverse proxy. Please see the [caveats](https://github.com/nextcloud/all-in-one#notes-on-cloudflare-proxytunnel) before proceeding. Here is then how to make it work:
 
 1. Install the Cloudflare Tunnel on the same machine where AIO will be running on and point the Tunnel with the domain that you want to use for AIO to `http://localhost:11000`.<br>
 ⚠️ **Please note:** Look into [this](#adaptation-of-the-respective-sample-configuration) to adapt the above example configuration.
-1. Now continue with [point 2](#2-use-this-startup-command) but additionally, add `--env SKIP_DOMAIN_VALIDATION=true` to the docker run command which will disable the dommain validation (because it is known that the domain validation will not work behind a Cloudflare Tunnel). So you need to ensure yourself that you've configured everything correctly.
+1. Now continue with [point 2](#2-use-this-startup-command) but additionally, add `--env SKIP_DOMAIN_VALIDATION=true` to the docker run command which will disable the domain validation (because it is known that the domain validation will not work behind a Cloudflare Tunnel). So you need to ensure yourself that you've configured everything correctly.
 
 **Advice:** Make sure to [disable Cloudflares Rocket Loader feature](https://help.nextcloud.com/t/login-page-not-working-solved/149417/8) as otherwise Nextcloud's login prompt will not be shown.
 
@@ -375,7 +375,7 @@ server {
 <summary>click here to expand</summary>
 
 First, please make sure that the environmental variables `PUID` and `PGID` in the compose.yaml file for NPM are either unset or set to `0`.
-If you need to change the GID/PID then please add `net.ipv4.ip_unprivileged_port_start=0` at the end of `/etc/sysctl.conf`. Note: this will cause that non root users can bind privilleged ports.
+If you need to change the GID/PID then please add `net.ipv4.ip_unprivileged_port_start=0` at the end of `/etc/sysctl.conf`. Note: this will cause that non root users can bind privileged ports.
 
 Second, see these screenshots for a working config:
 
