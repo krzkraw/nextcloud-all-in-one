@@ -30,13 +30,6 @@ redis.session.lock_retries = -1
 redis.session.lock_wait_time = 10000
 REDIS_CONF
 
-echo "Setting php max children..."
-MEMORY=$(awk '/MemTotal/ {printf "%d", $2/1024}' /proc/meminfo)
-PHP_MAX_CHILDREN=$((MEMORY/50))
-if [ -n "$PHP_MAX_CHILDREN" ]; then
-    sed -i "s/^pm.max_children =.*/pm.max_children = $PHP_MAX_CHILDREN/" /usr/local/etc/php-fpm.d/www.conf
-fi
-
 # Check permissions in ncdata
 touch "$NEXTCLOUD_DATA_DIR/this-is-a-test-file" &>/dev/null
 if ! [ -f "$NEXTCLOUD_DATA_DIR/this-is-a-test-file" ]; then
@@ -527,8 +520,8 @@ if [ "$COLLABORA_ENABLED" = 'yes' ]; then
     # Fix https://github.com/nextcloud/all-in-one/issues/188:
     php /var/www/html/occ config:system:set allow_local_remote_servers --type=bool --value=true
     # Make collabora more save
-    COLLABORA_IPv4_ADDRESS="$(dig "$NC_DOMAIN" A +short | grep '^[0-9.]\+$' | sort | head -n1)"
-    COLLABORA_IPv6_ADDRESS="$(dig "$NC_DOMAIN" AAAA +short | grep '^[0-9a-f:]\+$' | sort | head -n1)"
+    COLLABORA_IPv4_ADDRESS="$(dig "$NC_DOMAIN" A +short +search | grep '^[0-9.]\+$' | sort | head -n1)"
+    COLLABORA_IPv6_ADDRESS="$(dig "$NC_DOMAIN" AAAA +short +search | grep '^[0-9a-f:]\+$' | sort | head -n1)"
     COLLABORA_ALLOW_LIST="$(php /var/www/html/occ config:app:get richdocuments wopi_allowlist)"
     if [ -n "$COLLABORA_IPv4_ADDRESS" ]; then
         if ! echo "$COLLABORA_ALLOW_LIST" | grep -q "$COLLABORA_IPv4_ADDRESS"; then

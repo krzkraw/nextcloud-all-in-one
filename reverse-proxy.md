@@ -8,7 +8,7 @@ In order to run Nextcloud behind a web server or reverse proxy (like Apache, Ngi
 
 **Attention:** The process to run Nextcloud behind a reverse proxy consists of at least steps 1, 2 and 4:
 1. **Configure the reverse proxy! See [point 1](#1-add-this-to-your-reverse-proxy-config)**
-1. **Use the in this document provided startup command! See [point 2](#2-use-this-startup-command)**
+1. **Use this startup command! See [point 2](#2-use-this-startup-command)**
 1. Optional: If the reverse proxy is installed on the same host and in the host network, you should limit the apache container to only listen on localhost. See [point 3](#3-limit-the-access-to-the-apache-container)
 1. **Open the AIO interface. See [point 4](#4-open-the-aio-interface)**
 1. Optional: Get a valid certificate for the AIO interface! See [point 5](#5-optional-get-a-valid-certificate-for-the-aio-interface)
@@ -25,12 +25,12 @@ Of course you need to modify `<your-nc-domain>` to the domain on which you want 
 For this setup, the default sample configurations with `localhost:$APACHE_PORT` should work.
 
 **Running the Reverse Proxy in a Docker container on the same server**<br>
-For this setup, you can use as target `host.docker.internal:$APACHE_PORT` instead of `localhost:$APACHE_PORT`.<br>
+For this setup, you can use as target `host.docker.internal:$APACHE_PORT` instead of `localhost:$APACHE_PORT`. **⚠️ Important:** In order to make this work on Docker for Linux, you need to add `--add-host=host.docker.internal:host-gateway` to the docker run command of your reverse proxy container or `extra_hosts: ["host.docker.internal:host-gateway"]` in docker compose (it works on Docker Desktop by default).<br>
 Another option and actually the recommended way in this case is to use `--network host` option (or `network_mode: host` for docker-compose) as setting for the reverse proxy container to connect it to the host network. If you are using a firewall on the server, you need to open ports 80 and 443 for the reverse proxy manually. By doing so, the default sample configurations that point at `localhost:$APACHE_PORT` should work without having to modify them.
 
 **Running the Reverse Proxy on a different server (no matter if in container or not)**<br>
 For this setup, you need to use as target the private ip-address of the host that shall be running AIO. So e.g. `private.ip.address.of.aio.server:$APACHE_PORT` instead of `localhost:$APACHE_PORT`.<br>
-If you are not sure how to retrieve that, you can run: `ip a | grep "scope global" | head -1 | awk '{print $2}' | sed 's|/.*||'` on the server that shall be running AIO. If the command returns a public ip-address, use `ip a | grep "scope global" | grep docker0 | awk '{print $2}' | sed 's|/.*||'` instead (the commands only work on Linux).
+If you are not sure how to retrieve that, you can run: `ip a | grep "scope global" | head -1 | awk '{print $2}' | sed 's|/.*||'` on the server that shall be running AIO (the commands only work on Linux).
 
 ### Apache
 
@@ -383,7 +383,7 @@ Second, see these screenshots for a working config:
 
 ![grafik](https://user-images.githubusercontent.com/75573284/213889724-1ab32264-3e0c-4d83-b067-9fe9d1672fb2.png)
 
-![grafik](https://user-images.githubusercontent.com/75573284/213889797-42642302-b079-4378-a4a6-079f4f67058c.png)
+![grafik](https://github.com/nextcloud/all-in-one/assets/24786786/fecbb5ef-d2f4-4e0f-bc4b-82207e2c2809)
 
 ![grafik](https://user-images.githubusercontent.com/75573284/213889746-87dbe8c5-4d1f-492f-b251-bbf82f1510d0.png)
 

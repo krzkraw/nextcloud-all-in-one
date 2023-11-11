@@ -132,6 +132,8 @@ find ./ -name '*deployment.yaml' -exec sed -i "/hostPort:/d" \{} \;
 # shellcheck disable=SC1083
 find ./ -name '*persistentvolumeclaim.yaml' -exec sed -i "s|ReadOnlyMany|ReadWriteOnce|" \{} \;   
 # shellcheck disable=SC1083
+find ./ -name 'nextcloud-aio-nextcloud-persistentvolumeclaim.yaml' -exec sed -i "s|ReadWriteOnce|ReadWriteMany|"  \{} \;
+# shellcheck disable=SC1083
 find ./ -name '*persistentvolumeclaim.yaml' -exec sed -i "/accessModes:/i\ \ {{- if .Values.STORAGE_CLASS }}" \{} \;  
 # shellcheck disable=SC1083
 find ./ -name '*persistentvolumeclaim.yaml' -exec sed -i "/accessModes:/i\ \ storageClassName: {{ .Values.STORAGE_CLASS }}" \{} \; 
@@ -147,6 +149,8 @@ find ./ -name '*talk*' -exec sed -i "s|$TALK_PORT|{{ .Values.TALK_PORT }}|" \{} 
 find ./ -name '*apache-service.yaml' -exec sed -i "/^spec:/a\ \ type: LoadBalancer" \{} \;
 # shellcheck disable=SC1083
 find ./ -name '*talk-service.yaml' -exec sed -i "/^spec:/a\ \ type: LoadBalancer" \{} \;
+# shellcheck disable=SC1083
+find ./ -name '*service.yaml' -exec sed -i "/type: LoadBalancer/a\ \ externalTrafficPolicy: Local" \{} \;
 echo '---' > /tmp/talk-service.copy
 # shellcheck disable=SC1083
 find ./ -name '*talk-service.yaml' -exec cat \{} \; >> /tmp/talk-service.copy
@@ -219,6 +223,8 @@ echo 'STORAGE_CLASS:        # By setting this, you can adjust the storage class 
 for variable in "${VOLUME_VARIABLE[@]}"; do
     echo "$variable: 1Gi       # You can change the size of the $(echo "$variable" | sed 's|_STORAGE_SIZE||;s|_|-|g' | tr '[:upper:]' '[:lower:]') volume that default to 1Gi with this value" >> /tmp/sample.conf
 done
+sed -i "s|NEXTCLOUD_STORAGE_SIZE: 1Gi|NEXTCLOUD_STORAGE_SIZE: 5Gi|" /tmp/sample.conf
+sed -i "s|NEXTCLOUD_DATA_STORAGE_SIZE: 1Gi|NEXTCLOUD_DATA_STORAGE_SIZE: 5Gi|" /tmp/sample.conf
 mv /tmp/sample.conf ../helm-chart/values.yaml
 
 ENABLED_VARIABLES="$(grep -oP '^[A-Z_]+_ENABLED' ../helm-chart/values.yaml)"
